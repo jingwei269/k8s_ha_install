@@ -27,6 +27,7 @@
   copy: 
     src: "{{ ha_chk_src }}"
     dest: "{{ ha_chk_dest }}"
+    mode: 0755
   when: inventory_hostname in  groups['master']
 
 - name: load modulers
