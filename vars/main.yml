@@ -46,3 +46,25 @@ selinux_policy: targeted
 selinux_state: permissive
 
 tzone: Asia/Shanghai
+
+
+#### HA part #####
+ha_pkg: 
+  - keepalived
+  - haproxy
+
+ha_svc:
+  - keepalived
+  - haproxy
+
+
+
+ha_chk_src: files/check_apiserver.sh
+ha_chk_dest: /etc/keepalived/check_apiserver.sh
+
+ha_keep_master: files/keepalived.master.conf
+ha_keep_bkp: files/keepalived.bkp.conf
+ha_keep_dest: /etc/keepalived/keepalived.conf
+
+haproxy_src: files/haproxy.cfg
+haproxy_dest: /etc/haproxy/haproxy.cfg
