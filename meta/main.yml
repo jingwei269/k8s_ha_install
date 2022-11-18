@@ -1,0 +1,17 @@
+galaxy_info:
+  author: nobody
+  description: A role to configurte k8s required tools on Centos Steam
+
+  min_ansible_version: 2.4
+
+
+  platforms:
+   - name: EL
+     versions:
+      - 8
+
+  galaxy_tags:
+   - k8s
+
+# No dependencies
+dependencies: []

@@ -1,0 +1,48 @@
+## copy
+centos_repo: files/CentOS-Base.repo
+dest_repo_dir: /etc/yum.repos.d
+dest_centos_repo: "{{ dest_repo_dir }}/CentOS-Base.repo"
+repo_bakdir: /etc/yum.repos.d/repobak
+
+##yum_repository
+kube_baseurl: https://mirrors.aliyun.com/kubernetes/yum/repos/kubernetes-el7-x86_64
+kube_version: 1.24.1
+crio_version: 1.24
+
+crio_src: files/crio_1.24.repo
+crio_dest: /etc/yum.repos.d/crio_1.24.repo
+
+crio_conf_f: /etc/crio/crio.conf
+pause_image: 'pause_image = "registry.aliyuncs.com/google_containers/pause:3.7"'
+
+req_modulers:
+ - overlay
+ - br_netfilter
+
+mod_src: files/kubernetes.conf
+mod_dest: /etc/modules-load.d/kubernetes.conf
+
+k8s_kernels:
+ - net.bridge.bridge-nf-call-iptables
+ - net.bridge.bridge-nf-call-ip6tables
+ - net.ipv4.ip_forward
+
+sysctl_file: /etc/sysctl.d/kubernetes.conf
+
+
+kube_pkg:
+ - kubelet-"{{ kube_version }}"
+ - kubeadm-"{{ kube_version }}"
+ - kubectl-"{{ kube_version }}"
+
+svc: 
+ - crio
+ - kubelet 
+
+
+firewall_svc: firewalld
+
+selinux_policy: targeted 
+selinux_state: permissive
+
+tzone: Asia/Shanghai
