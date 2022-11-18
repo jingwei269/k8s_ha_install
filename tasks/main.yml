@@ -29,6 +29,16 @@
     dest: "{{ ha_chk_dest }}"
   when: inventory_hostname in  groups['master']
 
+- name: modify kernel parameters
+  sysctl:
+    name: "{{ item }}"
+    value: '1'
+    sysctl_file: "{{ sysctl_file }}"
+    sysctl_set: yes
+  loop: "{{ k8s_kernels }}"
+  when: inventory_hostname in  groups['master']
+
+
 - name: setup sebollean for haproxy 
   seboolean:
     name: haproxy_connect_any
