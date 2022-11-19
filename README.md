@@ -1,84 +1,81 @@
 ```
-通过ansible在CentOS Stream 8 上面安装和配置k8s所需的包和参数等。
-前提条件
-1. 在ansible控制节点安装ansible version > 2.4 ##测试版本2.13.5
-2. 在各个受控节点配置不需密码的sudo 的用户devops，并在控制节点配置ssh互信。
+运行方式：
+1. 准备requirement 文件如下：
 
-[root@ansible n_k8s_install]# ls -tlra
-total 20
--rw-r--r--. 1 root root  169 Nov 16 23:27 ansible.cfg
--rw-r--r--. 1 root root   64 Nov 16 23:27 inventory
--rw-r--r--. 1 root root   84 Nov 16 23:28 requirements.yml
-dr-xr-x---. 6 root root 4096 Nov 16 23:29 ..
--rw-r--r--. 1 root root   93 Nov 17 01:41 k8s_install.yml
-drwxr-xr-x. 3 root root  102 Nov 17 02:50 .
-drwxr-xr-x. 2 root root    6 Nov 17 02:50 roles
-====================================================
-[root@ansible n_k8s_install]# cat ansible.cfg
-[defaults]
-inventory=inventory
-remote_user=devops
-log_path=~/ansible.log
-
-
-
-[privilege_escalation]
-become=true
-become_ask_pass=False
-become_method=sudo
-become_user=root
-
-=========================================================
-[root@ansible n_k8s_install]# cat inventory
-[master]
-master1
-
-[worker]
-worker1
-worker2
-
-[newserver]
-worker3
-
-######### 配置requirement 文件###############################
-[root@ansible n_k8s_install]# cat requirements.yml
----
-- name: k8s_install
-  src: https://github.com/jingwei269/k8s_install
+[devops@ansible test-dep]$ cat requirements.yml
+- name: k8s_ha_install
+  src: https://github.com/jingwei269/k8s_ha_install
   scm: git
 
-################# playbook k8s_install.yml ##################
-[root@ansible n_k8s_install]# cat k8s_install.yml
+
+2. install role 
+ansible-galaxy install -r requirements.yml -p /roles 
+
+3. 准备主 playbook 如下: 
+hosts放置所有需要安装的节点，其中master节点放置到组master中  
+另外需要配置backup组，用于配置keepalived 
+[devops@ansible test-dep]$ cat k8s_ha_install.yml
 ---
 - name: prepare k8s required tools on new server
-  hosts: all
+  hosts: k8s
 
   roles:
-   - k8s_install
-[root@ansible n_k8s_install]#
+   - k8s_ha_install
 
-========================================================================
-运行ansible-galaxy 安装playbook，取放置于github的playbook，有可能install failed，因为网络原因。
-[root@ansible n_k8s_install]# ansible-galaxy install -r requirements.yml -p roles/
-Starting galaxy role install process
-- extracting k8s_install to /root/n_k8s_install/roles/k8s_install
-- k8s_install was installed successfully
+======inventory============
+[master]
+master[1:3].example.local
 
-运行playbook k8s_install.yml
-[root@ansible n_k8s_install]# ansible-playbook k8s_install.yml
+[worker]
+worker[1:2].example.local
 
 
-init k8s
-[root@ansible n_k8s_install]# ssh devops@master1 "sudo kubeadm init  --pod-network-cidr 10.244.0.0/16 --kubernetes-version=v1.24.1 --image-repository=registry.aliyuncs.com/google_containers "
+[k8s:children]
+master
+worker
 
-token 根据实际情况修改：
-[root@ansible n_k8s_install]# ssh devops@worker1 "sudo kubeadm join 192.168.31.22:6443 --token karad7.e2uopy5132ackb96 --discovery-token-ca-cert-hash sha256:b1ab5001fe3569076a7285f4f14bff5d1b0f9b35f5071608af49f42c403cf8ca "
-[root@ansible n_k8s_install]# ssh devops@worker3 "sudo kubeadm join 192.168.31.22:6443 --token karad7.e2uopy5132ackb96 --discovery-token-ca-cert-hash sha256:b1ab5001fe3569076a7285f4f14bff5d1b0f9b35f5071608af49f42c403cf8ca "
+[backup]
+master[2:3].example.local
 
-安装calico
-[root@master1 ~]# curl https://docs.projectcalico.org/manifests/calico.yaml | sed  -e '/192/s/# //g' -e '/IPV4POOL_CIDR/s/# //g' -e '/192/s/192\.168/10\.244/g' > calico.yaml
-  % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current
-                                 Dload  Upload   Total   Spent    Left  Speed
-100  229k  100  229k    0     0   335k      0 --:--:-- --:--:-- --:--:--  334k
-[root@master1 ~]# kubectl apply -f calico.yaml
+[newserver]
+master[2:3].example.local
+
+4. 编辑目录roles/k8s_ha_install/files/下的文件
+keepalived.master.conf
+keepalived.bkp.conf
+haproxy.cfg
+check_apiserver.sh
+修改VIP地址(所有文件)，以及对应各个master的IP地址(haproxy.cfg)。
+
+5. 运行playbook 
+ansible-playbook k8s_ha_install.yml
+
+
+6. 在master节点上初始化k8s集群：
+## --control-plane-endpoint 《-- 配置为VIP地址和端口(haproxy.cfg中的配置)
+## --upload-certs <--需要加上这个参数为配置多master
+kubeadm init  --control-plane-endpoint=192.168.31.50:9443 --pod-network-cidr 10.244.0.0/16 --kubernetes-version=v1.24.1 --image-repository=registry.aliyuncs.com/google_containers --upload-certs
+
+### 运行无误会出现下面提示： 
+You can now join any number of the control-plane node running the following command on each as root:
+
+  kubeadm join 192.168.31.50:9443 --token o0a6p3.4d0k2kb8dh0kq32g \
+	--discovery-token-ca-cert-hash sha256:6cad2a213eb100eacb08c07b36d7b51991bf20b8874d73228331e91ed921d393 \
+	--control-plane --certificate-key bfb03b2e461a46e53b060e84d8b0f5fa5c3fc88094cae8c20053900dc189838d
+
+Please note that the certificate-key gives access to cluster sensitive data, keep it secret!
+As a safeguard, uploaded-certs will be deleted in two hours; If necessary, you can use
+"kubeadm init phase upload-certs --upload-certs" to reload certs afterward.
+
+Then you can join any number of worker nodes by running the following on each as root:
+
+kubeadm join 192.168.31.50:9443 --token o0a6p3.4d0k2kb8dh0kq32g \
+	--discovery-token-ca-cert-hash sha256:6cad2a213eb100eacb08c07b36d7b51991bf20b8874d73228331e91ed921d393
+
+### 遇到的问题：pull image时出现解析到的地址时ipv6，且network is unreachable。需要检查DNS配置。
+[root@master2 keepalived]# crictl pull registry.aliyuncs.com/google_containers/pause:3.7
+E1119 10:04:54.333462   12892 remote_image.go:242] "PullImage from image service failed" err="rpc error: code = Unknown desc = Get \"https://dockerauth.cn-hangzhou.aliyuncs.com/auth?scope=repository%3Agoogle_containers%2Fpause%3Apull&service=registry.aliyuncs.com%3Acn-hangzhou%3A26842\": dial tcp [2408:4005:1000:10::2]:443: connect: network is unreachable" image="registry.aliyuncs.com/google_containers/pause:3.7"
+FATA[0000] pulling image: rpc error: code = Unknown desc = Get "https://dockerauth.cn-hangzhou.aliyuncs.com/auth?scope=repository%3Agoogle_containers%2Fpause%3Apull&service=registry.aliyuncs.com%3Acn-hangzhou%3A26842": dial tcp [2408:4005:1000:10::2]:443: connect: network is unreachable
+
+
 ```
