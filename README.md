@@ -80,4 +80,108 @@ E1119 10:04:54.333462   12892 remote_image.go:242] "PullImage from image service
 FATA[0000] pulling image: rpc error: code = Unknown desc = Get "https://dockerauth.cn-hangzhou.aliyuncs.com/auth?scope=repository%3Agoogle_containers%2Fpause%3Apull&service=registry.aliyuncs.com%3Acn-hangzhou%3A26842": dial tcp [2408:4005:1000:10::2]:443: connect: network is unreachable
 
 
+
+
+#####测试情况#######
+## 当前所有节点状态Ready
+[devops@ansible test-dep]$ k get nodes
+NAME                    STATUS   ROLES           AGE   VERSION
+master1.example.local   Ready    control-plane   61m   v1.24.1
+master2.example.local   Ready    control-plane   32m   v1.24.1
+master3.example.local   Ready    control-plane   33m   v1.24.1
+worker1.example.local   Ready    <none>          55m   v1.24.1
+worker2.example.local   Ready    <none>          29m   v1.24.1
+
+## 查询哪一个节点host VIP
+[devops@ansible test-dep]$ ansible master  -m shell -a "ip a |grep 192.168.31.50 "
+master3.example.local | CHANGED | rc=0 >>
+    inet 192.168.31.50/32 scope global ens192
+master2.example.local | FAILED | rc=1 >>
+non-zero return code
+master1.example.local | FAILED | rc=1 >>
+non-zero return code
+
+## 手工关闭VIP所在节点
+[devops@ansible test-dep]$ ssh devops@master3.example.local "sudo init 0"
+Connection to master3.example.local closed by remote host.
+
+###需要等待一会儿，会发现master3 not ready 
+[devops@ansible test-dep]$ k get nodes
+NAME                    STATUS     ROLES           AGE   VERSION
+master1.example.local   Ready      control-plane   63m   v1.24.1
+master2.example.local   Ready      control-plane   34m   v1.24.1
+master3.example.local   NotReady   control-plane   35m   v1.24.1
+worker1.example.local   Ready      <none>          58m   v1.24.1
+worker2.example.local   Ready      <none>          32m   v1.24.1
+
+### 此时再次查看VIP所在节点
+[devops@ansible test-dep]$ ansible master -m shell -a "ip a |grep 192.168.31.50"
+master2.example.local | CHANGED | rc=0 >>
+    inet 192.168.31.50/32 scope global ens192
+master1.example.local | FAILED | rc=1 >>
+non-zero return code
+master3.example.local | UNREACHABLE! => {
+    "changed": false,
+    "msg": "Failed to connect to the host via ssh: ssh: connect to host master3.example.local port 22: No route to host",
+    "unreachable": true
+}
+[devops@ansible test-dep]$ 
+
+##### 手工启动master3.example.local 
+[devops@ansible test-dep]$ k get nodes
+NAME                    STATUS   ROLES           AGE   VERSION
+master1.example.local   Ready    control-plane   66m   v1.24.1
+master2.example.local   Ready    control-plane   38m   v1.24.1
+master3.example.local   Ready    control-plane   38m   v1.24.1
+worker1.example.local   Ready    <none>          61m   v1.24.1
+worker2.example.local   Ready    <none>          35m   v1.24.1
+
+### 再次验证VIP所在节点：
+[devops@ansible test-dep]$ ansible master -m shell -a "ip a |grep 192.168.31.50"
+master3.example.local | FAILED | rc=1 >>
+non-zero return code
+master1.example.local | FAILED | rc=1 >>
+non-zero return code
+master2.example.local | CHANGED | rc=0 >>
+    inet 192.168.31.50/32 scope global ens192
+[devops@ansible test-dep]$
+
+## 关闭master2
+[devops@ansible test-dep]$ ssh devops@master2.example.local "sudo init 0"
+Connection to master2.example.local closed by remote host.
+
+## 验证各节点状态
+[devops@ansible test-dep]$ k get nodes
+NAME                    STATUS     ROLES           AGE   VERSION
+master1.example.local   Ready      control-plane   71m   v1.24.1
+master2.example.local   NotReady   control-plane   42m   v1.24.1
+master3.example.local   Ready      control-plane   43m   v1.24.1
+worker1.example.local   Ready      <none>          65m   v1.24.1
+worker2.example.local   Ready      <none>          39m   v1.24.1
+[devops@ansible test-dep]$
+
+### 验证VIP所在节点
+[devops@ansible test-dep]$ ansible master -m shell -a "ip a |grep 192.168.31.50"
+master3.example.local | FAILED | rc=1 >>
+non-zero return code
+master1.example.local | CHANGED | rc=0 >>
+    inet 192.168.31.50/32 scope global ens192
+master2.example.local | UNREACHABLE! => {
+    "changed": false,
+    "msg": "Failed to connect to the host via ssh: ssh: connect to host master2.example.local port 22: Connection timed out",
+    "unreachable": true
+}
+[devops@ansible test-dep]$
+
+
+###手工启动master2
+[devops@ansible test-dep]$ k get nodes
+NAME                    STATUS   ROLES           AGE   VERSION
+master1.example.local   Ready    control-plane   73m   v1.24.1
+master2.example.local   Ready    control-plane   44m   v1.24.1
+master3.example.local   Ready    control-plane   45m   v1.24.1
+worker1.example.local   Ready    <none>          68m   v1.24.1
+worker2.example.local   Ready    <none>          42m   v1.24.1
+[devops@ansible test-dep]$
+
 ```
