@@ -1,4 +1,122 @@
 ---
+
+- name: Create backup repos directory
+  file:
+     path: "{{ repo_bakdir }}"
+     state: directory
+
+- name: move old repos to backup directory
+  shell: "mv /etc/yum.repos.d/*.repo  {{ repo_bakdir }}"
+  ignore_errors: true
+
+- name: Install aliyun repos
+  copy:
+    src:  "{{ centos_repo }}"
+    dest: "{{ dest_centos_repo }}"
+
+- name: Remove epel_repo incase if installed
+  yum:
+   name: epel-release
+   state: absent
+  ignore_errors: true ### in case if not installed
+
+- name: Install epel_repo
+  yum:
+   name: epel-release
+   state: latest
+
+- name: modify epel_repos
+  shell: "yum repolist |grep aliyum ||sed -i.bak  -e 's|^metalink|#metalink|'  -e 's|^#baseurl=|baseurl=|'  -e 's|download.example/pub|mirrors.aliyun.com|' /etc/yum.repos.d/epel*.repo"
+
+- name: update OS
+  yum:
+   name: '*'
+   state: latest
+  notify: reboot os
+
+- name: add modulers file
+  copy: 
+    src: "{{ mod_src }}"
+    dest: "{{ mod_dest }}"
+
+- name: load modulers
+  modprobe:
+    name: "{{ item }}"
+    state: present
+  loop: "{{ req_modulers }}"
+
+- name: modify kernel parameters
+  sysctl:
+    name: "{{ item }}"
+    value: '1'
+    sysctl_file: "{{ sysctl_file }}"
+    sysctl_set: yes
+  loop: "{{ k8s_kernels }}"
+   
+
+- name: stop firewall and disable
+  service:
+    name: "{{firewall_svc }}"
+    state: stopped
+    enabled: no
+
+- name: modify selinux policy
+  selinux:
+    policy: "{{ selinux_policy }}"
+    state: "{{ selinux_state }}"
+
+- name: disable swap
+  shell: "sed -i.bk 's/^[^#].*swap.*/#&/g' /etc/fstab ; swapoff -a "
+  ignore_errors: true
+
+
+- name: set timezone to Asia/Shanghai
+  timezone:
+     name: "{{ tzone }}"
+
+- name: add kube tools repos
+  yum_repository:
+      name: kubernets
+      description: kubernets
+      baseurl: "{{ kube_baseurl }}"
+      gpgcheck: no
+      file: kubernets
+
+- name: install kubenetes
+  yum:
+      name: "{{ kube_pkg }}"
+      state: latest
+
+- name: prepare crio repos
+  copy:
+      src: "{{ crio_src }}"
+      dest: "{{ crio_dest }}"
+
+
+- name: install crio
+  yum:
+      name: crio
+      state: latest
+
+- name: update pause_image seting
+  lineinfile:
+    path: /etc/crio/crio.conf
+    regexp: '^# pause_image =.*'
+    line: "{{ pause_image }}"
+
+- name: keyPaths Fix
+  replace:
+    path: /etc/containers/policy.json
+    regexp: '^.*keyPaths.*'
+    replace: '                    "keyPath": "/etc/pki/rpm-gpg/RPM-GPG-KEY-redhat-release"'
+
+- name: start & enable crio & kubelet
+  service:
+      name: "{{ item }}"
+      state: started
+      enabled: yes
+  loop: "{{ svc }}"
+
 - name: install ha required packages
   yum: 
     name: "{{ ha_pkg}}"
@@ -29,21 +147,6 @@
     dest: "{{ ha_chk_dest }}"
     mode: 0755
   when: inventory_hostname in  groups['master']
-
-- name: load modulers
-  modprobe:
-    name: "{{ item }}"
-    state: present
-  loop: "{{ req_modulers }}"
-
-- name: modify kernel parameters
-  sysctl:
-    name: "{{ item }}"
-    value: '1'
-    sysctl_file: "{{ sysctl_file }}"
-    sysctl_set: yes
-  loop: "{{ k8s_kernels }}"
-
 
 
 - name: setup sebollean for haproxy 
