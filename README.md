@@ -46,6 +46,8 @@ keepalived.bkp.conf
 haproxy.cfg
 check_apiserver.sh
 修改VIP地址(所有文件)，以及对应各个master的IP地址(haproxy.cfg)。
+还需要修改interface (nmcli dev show  |grep -i dev) . 
+
 
 5. 运行playbook 
 ansible-playbook k8s_ha_install.yml
