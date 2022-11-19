@@ -36,7 +36,10 @@ worker[1:2].example.local
 master
 worker
 
-[backup]
+[keepmaster]
+master1.example.local
+
+[keepbackup]
 master[2:3].example.local
 
 [newserver]

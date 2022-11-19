@@ -133,13 +133,13 @@
   copy: 
     src: "{{ ha_keep_master }}"
     dest: "{{ ha_keep_dest }}"
-  when: inventory_hostname == 'master1.example.local'
+  when: inventory_hostname in  groups['keepmaster']
 
 - name: upload keepalived backup conf
   copy: 
     src: "{{ ha_keep_bkp }}"
     dest: "{{ ha_keep_dest }}"
-  when: inventory_hostname in  groups['backup']
+  when: inventory_hostname in  groups['keepbackup']
 
 - name: upload check api script
   copy: 
