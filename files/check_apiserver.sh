@@ -1,7 +1,7 @@
 #!/bin/sh
 # should be located in /etc/keepalived/check_apiserver.sh
 APISERVER_VIP=192.168.31.50
-APISERVER_DEST_PORT=6443
+APISERVER_DEST_PORT=9443
 errorExit() {
     echo "*** $*" 1>&2
     exit 1
